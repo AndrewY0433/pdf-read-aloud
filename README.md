@@ -1,5 +1,7 @@
 # PDF read-aloud
 
+[![CI](https://github.com/AndrewY0433/pdf-read-aloud/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/AndrewY0433/pdf-read-aloud/actions/workflows/ci.yml)
+
 Small web app: upload a PDF, read it aloud in the browser, and highlight the current word.
 
 ## Speech engines
