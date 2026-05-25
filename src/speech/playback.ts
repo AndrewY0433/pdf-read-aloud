@@ -128,6 +128,20 @@ export class ReadAloudSession {
   }
 
   /**
+   * Release the underlying engine. Stops playback and frees any system
+   * resources (Web Speech queue, audio elements, blob URLs, neural model
+   * handle). Safe to call on tab unload; the session must not be used after.
+   */
+  dispose(): void {
+    try {
+      this.engine.stop();
+    } catch {
+      /* best-effort */
+    }
+    this.engine.dispose();
+  }
+
+  /**
    * Switch to a different TTS engine. Preserves the current content so the
    * new engine is ready to play immediately. Stops any in-progress playback.
    */

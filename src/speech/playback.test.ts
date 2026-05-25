@@ -166,4 +166,15 @@ describe('ReadAloudSession orchestration', () => {
     // After swap the new engine should also be able to play without error.
     expect(() => session.play(true)).not.toThrow();
   });
+
+  it('dispose stops the engine and releases resources', () => {
+    localStorage.setItem('pdf-read-aloud.engine', 'web-speech');
+    const { words, speakText } = makeWords('hello there friend kind.');
+    const session = new ReadAloudSession(words, speakText, blankHooks());
+    session.play(true);
+    expect((globalThis.speechSynthesis as unknown as { speak: { mock: { calls: unknown[] } } }).speak.mock.calls.length).toBeGreaterThan(0);
+    session.dispose();
+    // Stop should have cancelled the in-flight utterance.
+    expect((globalThis.speechSynthesis as unknown as { cancel: { mock: { calls: unknown[] } } }).cancel.mock.calls.length).toBeGreaterThan(0);
+  });
 });

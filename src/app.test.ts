@@ -163,3 +163,25 @@ describe('mount() — drag and drop', () => {
     expect(viewer.classList.contains('drag')).toBe(false);
   });
 });
+
+describe('mount() — tab lifecycle', () => {
+  it('cancels speech on pagehide so the OS speech queue never outlives the tab', () => {
+    setup();
+    const speech = globalThis.speechSynthesis as unknown as {
+      cancel: { mock: { calls: unknown[] } };
+    };
+    const beforeCount = speech.cancel.mock.calls.length;
+    window.dispatchEvent(new Event('pagehide'));
+    expect(speech.cancel.mock.calls.length).toBeGreaterThan(beforeCount);
+  });
+
+  it('cancels speech on beforeunload as well (Firefox compat fallback)', () => {
+    setup();
+    const speech = globalThis.speechSynthesis as unknown as {
+      cancel: { mock: { calls: unknown[] } };
+    };
+    const beforeCount = speech.cancel.mock.calls.length;
+    window.dispatchEvent(new Event('beforeunload'));
+    expect(speech.cancel.mock.calls.length).toBeGreaterThan(beforeCount);
+  });
+});

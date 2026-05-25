@@ -174,6 +174,19 @@ describe('KokoroEngine playback control', () => {
     expect(hooks.onWordIndex).toHaveBeenCalledWith(0);
   });
 
+  it('startAt resumes from the requested word within a chunk', async () => {
+    const hooks = makeHooks();
+    const engine = new KokoroEngine(asPlaybackHooks(hooks));
+    const { words, speakText } = makeWords(
+      'one two three four five six seven eight nine ten.',
+    );
+    engine.setContent(words, speakText);
+    engine.startAt(7);
+    await new Promise<void>((r) => setTimeout(r, 30));
+    expect(hooks.onWordIndex).toHaveBeenCalledWith(7);
+    expect(generateMock).toHaveBeenCalledWith('eight nine ten.', expect.any(Object));
+  });
+
   it('passes the current rate to kokoro.generate', async () => {
     const engine = new KokoroEngine(asPlaybackHooks(makeHooks()));
     const { words, speakText } = makeWords('Speed test goes here today friend.');

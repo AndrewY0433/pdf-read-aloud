@@ -23,6 +23,7 @@ export class KokoroEngine implements PlaybackEngine {
   readonly id = 'kokoro' as const;
 
   private words: WordEntity[] = [];
+  private speakText = '';
   private chunks: SpeechChunk[] = [];
   private hooks: PlaybackHooks;
 
@@ -58,6 +59,7 @@ export class KokoroEngine implements PlaybackEngine {
   setContent(words: WordEntity[], speakText: string): void {
     this.stopPlayback();
     this.words = words;
+    this.speakText = speakText;
     this.chunks = buildChunks(words, speakText);
     this.wordIndex = 0;
   }
@@ -79,8 +81,9 @@ export class KokoroEngine implements PlaybackEngine {
       this.hooks.onIdle();
       return;
     }
-    const start = findChunkForWord(this.chunks, wordIndex);
-    void this.runPlayback(start);
+    const clamped = Math.max(0, Math.min(wordIndex, this.words.length - 1));
+    const start = findChunkForWord(this.chunks, clamped);
+    void this.runPlayback(start, clamped);
   }
 
   resume(): void {
@@ -112,7 +115,7 @@ export class KokoroEngine implements PlaybackEngine {
     this.kokoro = null;
   }
 
-  private async runPlayback(startChunkIdx: number): Promise<void> {
+  private async runPlayback(startChunkIdx: number, resumeWordIndex: number): Promise<void> {
     this.stopPlayback();
     const runId = ++this.runId;
 
@@ -128,17 +131,20 @@ export class KokoroEngine implements PlaybackEngine {
     if (runId !== this.runId) return;
     this.hooks.onStatus?.(null);
 
-    const firstChunk = this.chunks[startChunkIdx];
-    if (firstChunk) {
-      this.wordIndex = firstChunk.wordStart;
-      this.hooks.onWordIndex(this.wordIndex);
-    }
+    this.wordIndex = resumeWordIndex;
+    this.hooks.onWordIndex(resumeWordIndex);
 
-    void this.runGenerator(startChunkIdx, runId);
-    await this.runConsumer(startChunkIdx, runId);
+    void this.runGenerator(startChunkIdx, runId, resumeWordIndex);
+    await this.runConsumer(startChunkIdx, runId, resumeWordIndex);
   }
 
-  private async runGenerator(startIdx: number, runId: number): Promise<void> {
+  private textFromWord(wordIndex: number, chunk: SpeechChunk): string {
+    const w = this.words[wordIndex];
+    if (!w) return chunk.text;
+    return this.speakText.substring(w.charStart, chunk.charEnd);
+  }
+
+  private async runGenerator(startIdx: number, runId: number, resumeWordIndex: number): Promise<void> {
     for (let i = startIdx; i < this.chunks.length; i++) {
       if (runId !== this.runId) return;
       // Stay no more than LOOKAHEAD chunks ahead of the chunk currently playing.
@@ -153,8 +159,11 @@ export class KokoroEngine implements PlaybackEngine {
       if (this.cache.has(i)) continue;
 
       const chunk = this.chunks[i]!;
+      const fromWord = i === startIdx ? resumeWordIndex : chunk.wordStart;
+      const text =
+        fromWord > chunk.wordStart ? this.textFromWord(fromWord, chunk) : chunk.text;
       try {
-        const result = await this.kokoro!.generate(chunk.text, {
+        const result = await this.kokoro!.generate(text, {
           voice: DEFAULT_VOICE,
           speed: this.rate,
         });
@@ -168,7 +177,7 @@ export class KokoroEngine implements PlaybackEngine {
     }
   }
 
-  private async runConsumer(startIdx: number, runId: number): Promise<void> {
+  private async runConsumer(startIdx: number, runId: number, resumeWordIndex: number): Promise<void> {
     for (let i = startIdx; i < this.chunks.length; i++) {
       if (runId !== this.runId) return;
 
@@ -180,10 +189,11 @@ export class KokoroEngine implements PlaybackEngine {
       const url = this.cache.get(i)!;
       const chunk = this.chunks[i]!;
       this.currentChunkIdx = i;
-      this.wordIndex = chunk.wordStart;
-      this.hooks.onWordIndex(this.wordIndex);
+      const playbackWordStart = i === startIdx ? resumeWordIndex : chunk.wordStart;
+      this.wordIndex = playbackWordStart;
+      this.hooks.onWordIndex(playbackWordStart);
 
-      await this.playChunk(url, chunk, runId);
+      await this.playChunk(url, chunk, runId, playbackWordStart);
       if (runId !== this.runId) return;
 
       URL.revokeObjectURL(url);
@@ -197,18 +207,28 @@ export class KokoroEngine implements PlaybackEngine {
     }
   }
 
-  private playChunk(blobUrl: string, chunk: SpeechChunk, runId: number): Promise<void> {
+  private playChunk(
+    blobUrl: string,
+    chunk: SpeechChunk,
+    runId: number,
+    playbackWordStart = chunk.wordStart,
+  ): Promise<void> {
     return new Promise<void>((resolve) => {
       const audio = new Audio(blobUrl);
       audio.preload = 'auto';
       this.audio = audio;
 
+      const playbackCharStart =
+        this.words[playbackWordStart]?.charStart ?? chunk.charStart;
+      const playbackCharEnd = chunk.charEnd;
+
       const onTimeUpdate = (): void => {
         if (runId !== this.runId || !audio.duration || !Number.isFinite(audio.duration)) return;
         const ratio = Math.min(1, Math.max(0, audio.currentTime / audio.duration));
-        const targetChar = chunk.charStart + ratio * Math.max(1, chunk.charEnd - chunk.charStart);
+        const span = Math.max(1, playbackCharEnd - playbackCharStart);
+        const targetChar = playbackCharStart + ratio * span;
         const idx = charIndexToWordIndex(this.words, targetChar);
-        const clamped = Math.min(Math.max(idx, chunk.wordStart), chunk.wordEnd);
+        const clamped = Math.min(Math.max(idx, playbackWordStart), chunk.wordEnd);
         if (clamped !== this.wordIndex) {
           this.wordIndex = clamped;
           this.hooks.onWordIndex(clamped);
