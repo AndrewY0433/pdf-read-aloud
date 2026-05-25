@@ -1,0 +1,29 @@
+{
+  "name": "pdf-read-aloud",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.build.json && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install --with-deps chromium",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^25.9.1",
+    "happy-dom": "^20.9.0",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.3",
+    "vitest": "^4.1.7"
+  },
+  "dependencies": {
+    "kokoro-js": "^1.2.1",
+    "pdfjs-dist": "^4.10.38"
+  }
+}
