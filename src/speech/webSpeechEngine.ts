@@ -38,6 +38,10 @@ export class WebSpeechEngine implements PlaybackEngine {
     speechSynthesis.getVoices();
   }
 
+  async prewarmFrom(_wordIndex: number): Promise<void> {
+    speechSynthesis.getVoices();
+  }
+
   setContent(words: WordEntity[], speakText: string): void {
     this.cancelSpeech();
     this.words = words;

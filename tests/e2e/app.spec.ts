@@ -151,6 +151,8 @@ test.describe('PDF upload', () => {
     await expect(page.locator('.pdf-page canvas')).toBeVisible();
     await expect(page.locator('[data-act=play]')).toBeEnabled();
     await expect(page.locator('.filename')).toHaveText(/hello\.pdf/);
+    await expect(page.locator('.progress-bar')).toBeVisible();
+    await expect(page.locator('.progress-bar__tooltip')).toHaveText('Page 1 of 1');
   });
 
   test('clicking Play flips the Pause button to enabled', async ({ page }) => {

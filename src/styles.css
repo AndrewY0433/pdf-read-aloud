@@ -49,6 +49,50 @@ body {
   background: #111;
 }
 
+.progress-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+}
+
+.progress-bar__track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.progress-bar__fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.15s ease;
+}
+
+.progress-bar__tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(37, 38, 43, 0.96);
+  border: 1px solid #34353d;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.progress-bar:hover .progress-bar__tooltip,
+.progress-bar:focus-within .progress-bar__tooltip {
+  opacity: 1;
+}
+
 .follow-btn {
   position: absolute;
   right: 16px;

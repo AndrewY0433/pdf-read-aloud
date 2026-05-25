@@ -200,6 +200,58 @@ describe('KokoroEngine playback control', () => {
     );
   });
 
+  it('prewarmFrom synthesises the first chunk ahead of Play', async () => {
+    const engine = new KokoroEngine(asPlaybackHooks(makeHooks()));
+    const { words, speakText } = makeWords(
+      'one two three four five six seven eight nine ten.',
+    );
+    engine.setContent(words, speakText);
+    await engine.prewarmFrom(0);
+    expect(generateMock).toHaveBeenCalled();
+    engine.startAt(0);
+    await new Promise<void>((r) => setTimeout(r, 20));
+    // Second generate should not be needed for chunk 0 right away.
+    expect(generateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('setRate time-stretches the active clip instead of restarting the chunk', async () => {
+    type FakeAudio = {
+      playbackRate: number;
+      preservesPitch: boolean;
+      paused: boolean;
+    };
+    const hooks = makeHooks();
+    const engine = new KokoroEngine(asPlaybackHooks(hooks));
+    const { words, speakText } = makeWords(
+      'one two three four five six seven eight nine ten.',
+    );
+    engine.setContent(words, speakText);
+    await engine.prepare();
+
+    const internal = engine as unknown as {
+      audio: FakeAudio | null;
+      currentChunkIdx: number;
+      chunkSynthesisRate: Map<number, number>;
+      rate: number;
+    };
+    const audio: FakeAudio = {
+      playbackRate: 1,
+      preservesPitch: false,
+      paused: false,
+    };
+    internal.audio = audio;
+    internal.currentChunkIdx = 0;
+    internal.chunkSynthesisRate.set(0, 1);
+    internal.rate = 1;
+
+    engine.setRate(1.5);
+
+    expect(audio.playbackRate).toBe(1.5);
+    expect(audio.preservesPitch).toBe(true);
+    expect(hooks.onWordIndex).not.toHaveBeenCalled();
+    expect(internal.rate).toBe(1.5);
+  });
+
   it('setRate is a no-op when the value is unchanged', () => {
     const engine = new KokoroEngine(asPlaybackHooks(makeHooks()));
     engine.setRate(1);

@@ -80,6 +80,13 @@ describe('mount() — initial UI', () => {
     expect(down).toBeTruthy();
     expect(up).toBeTruthy();
   });
+
+  it('includes a hidden progress bar before a PDF is loaded', () => {
+    const root = setup();
+    const bar = root.querySelector<HTMLElement>('.progress-bar');
+    expect(bar).toBeTruthy();
+    expect(bar?.hidden).toBe(true);
+  });
 });
 
 describe('mount() — speed control', () => {
@@ -122,6 +129,71 @@ describe('mount() — speed control', () => {
     const root = setup();
     root.querySelector<HTMLButtonElement>('[data-act=speed-up]')!.click();
     expect(localStorage.getItem('pdf-read-aloud.rate')).toBe('1.25');
+  });
+
+  it('+ and − keys step the rate by 0.25x', () => {
+    const root = setup();
+    const value = () => root.querySelector('.speed-value')?.textContent;
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '=', bubbles: true }));
+    expect(value()).toBe('1.25x');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '+', bubbles: true }));
+    expect(value()).toBe('1.5x');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', bubbles: true }));
+    expect(value()).toBe('1.25x');
+  });
+});
+
+describe('mount() — play / pause', () => {
+  it('Space toggles play and pause when a PDF is loaded', async () => {
+    const { loadAndRenderPdf } = await import('./pdf/renderPages');
+    vi.mocked(loadAndRenderPdf).mockResolvedValue({
+      doc: { destroy: vi.fn(), numPages: 5 },
+      fileName: 'test.pdf',
+      pages: [],
+      words: [
+        {
+          pageIndex: 0,
+          wordIndex: 0,
+          sentenceId: 0,
+          text: 'Hello',
+          charStart: 0,
+          charEnd: 5,
+          left: 0,
+          top: 0,
+          width: 10,
+          height: 10,
+        },
+      ],
+      speakText: 'Hello',
+      virtual: {
+        destroy: vi.fn(),
+        ensurePageRendered: vi.fn().mockResolvedValue(undefined),
+      },
+    } as Awaited<ReturnType<typeof loadAndRenderPdf>>);
+
+    const root = setup();
+    const fileInput = root.querySelector<HTMLInputElement>('input[type=file]')!;
+    const file = new File(['%PDF'], 'test.pdf', { type: 'application/pdf' });
+    Object.defineProperty(fileInput, 'files', { value: [file] });
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    await vi.waitFor(() => {
+      expect(root.querySelector<HTMLButtonElement>('[data-act=play]')?.disabled).toBe(false);
+    });
+
+    const progressBar = root.querySelector<HTMLElement>('.progress-bar')!;
+    expect(progressBar.hidden).toBe(false);
+    expect(progressBar.querySelector('.progress-bar__tooltip')?.textContent).toBe('Page 1 of 5');
+
+    const playBtn = () => root.querySelector<HTMLButtonElement>('[data-act=play]')!;
+    const pauseBtn = () => root.querySelector<HTMLButtonElement>('[data-act=pause]')!;
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true }));
+    expect(pauseBtn().disabled).toBe(false);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true }));
+    expect(playBtn().disabled).toBe(false);
+    expect(pauseBtn().disabled).toBe(true);
   });
 });
 

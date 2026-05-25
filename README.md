@@ -1,6 +1,6 @@
 # PDF read-aloud
 
-Small web app: upload a PDF, read it aloud in the browser, and highlight the current word (with a lighter tint for the current sentence).
+Small web app: upload a PDF, read it aloud in the browser, and highlight the current word.
 
 ## Speech engines
 
@@ -38,9 +38,17 @@ npm run preview
 ## Controls
 
 - **Play** — starts from the beginning when idle; **Pause** pauses speech (resume with Play).
+- **Space** — toggle play / pause.
+- **+ / −** — adjust playback speed.
 - **Click any word** — restart playback from that word.
 - **Upload** — choose another PDF.
 - **Neural / Browser** — switch TTS engines on the fly.
+- **Progress bar** — thin bar at the bottom of the viewer; hover to see which page you are on out of the total (e.g. “Page 12 of 240”).
+
+## Todo
+- [ ] **Voice selection** — pick a voice per engine (Kokoro voices and browser `speechSynthesis` voices).
+- [ ] **CI** — GitHub Actions workflow running typecheck, unit tests, and e2e on every push.
+- [ ] **Reformat `app.ts`** — split the monolithic `mount()` into smaller modules (chrome, resize handlers, playback wiring).
 
 ## Stack
 

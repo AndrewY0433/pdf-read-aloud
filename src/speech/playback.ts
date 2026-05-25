@@ -160,6 +160,11 @@ export class ReadAloudSession {
     return this.engine.prepare();
   }
 
+  /** Pre-render the first playable chunk so Play starts without a delay. */
+  prewarmFrom(wordIndex: number): Promise<void> {
+    return this.engine.prewarmFrom(wordIndex);
+  }
+
   private createEngine(id: EngineId): PlaybackEngine {
     if (id === 'kokoro') return new KokoroEngine(this.hooks);
     return new WebSpeechEngine(this.hooks);

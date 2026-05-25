@@ -19,6 +19,12 @@ export interface PlaybackEngine {
    * calls await the first attempt.
    */
   prepare(): Promise<void>;
+  /**
+   * Pre-render audio from `wordIndex` through the end of its speech chunk so
+   * the first Play() does not wait on synthesis. Engines that don't batch
+   * audio may no-op after prepare().
+   */
+  prewarmFrom(wordIndex: number): Promise<void>;
   setContent(words: WordEntity[], speakText: string): void;
   /**
    * Set the playback rate (1.0 = normal). If playback is in progress the

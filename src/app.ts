@@ -15,6 +15,7 @@ import {
   RATE_STEP,
   type EngineId,
 } from './speech/playback';
+import { createProgressBar, syncProgressBar } from './progressBar';
 import type { AppState } from './types';
 
 type LoadedBuffer = { buffer: ArrayBuffer; fileName: string };
@@ -78,7 +79,9 @@ export function mount(root: HTMLElement): void {
     </div>
   `;
 
-  viewerFrame.append(viewer, followBtn, overlay);
+  const progressBar = createProgressBar();
+
+  viewerFrame.append(viewer, progressBar.root, followBtn, overlay);
 
   const bar = document.createElement('div');
   bar.className = 'bottom-bar';
@@ -86,17 +89,17 @@ export function mount(root: HTMLElement): void {
     <span class="filename"></span>
     <span class="status"></span>
     <div class="speed-control" role="group" aria-label="Playback speed">
-      <button type="button" class="speed-btn" data-act="speed-down" title="Slower (-${RATE_STEP}x)" aria-label="Slower">&laquo;</button>
+      <button type="button" class="speed-btn" data-act="speed-down" title="Slower (−${RATE_STEP}x, − key)" aria-label="Slower">&laquo;</button>
       <span class="speed-value" aria-live="polite">1.0x</span>
-      <button type="button" class="speed-btn" data-act="speed-up" title="Faster (+${RATE_STEP}x)" aria-label="Faster">&raquo;</button>
+      <button type="button" class="speed-btn" data-act="speed-up" title="Faster (+${RATE_STEP}x, + key)" aria-label="Faster">&raquo;</button>
     </div>
     <div class="engine-toggle" role="group" aria-label="Speech engine">
       <button type="button" class="toggle-btn" data-engine="kokoro" title="High-quality neural voice. ~85 MB model, cached locally.">Neural</button>
       <button type="button" class="toggle-btn" data-engine="web-speech" title="Built-in browser voices. Instant, lower quality.">Browser</button>
     </div>
     <button type="button" class="btn secondary" data-act="pick" title="Open another PDF">Upload</button>
-    <button type="button" class="btn" data-act="play" disabled>Play</button>
-    <button type="button" class="btn secondary" data-act="pause" disabled>Pause</button>
+    <button type="button" class="btn" data-act="play" title="Play (Space)" disabled>Play</button>
+    <button type="button" class="btn secondary" data-act="pause" title="Pause (Space)" disabled>Pause</button>
   `;
 
   shell.append(errEl, viewerFrame, bar);
@@ -116,6 +119,7 @@ export function mount(root: HTMLElement): void {
   const session = new ReadAloudSession([], '', {
     onWordIndex: (i) => {
       currentWordIndex = i;
+      syncProgressBar(progressBar, pdf, i);
       if (!pdf) return;
       void (async () => {
         const w = pdf!.words[i];
@@ -205,6 +209,7 @@ export function mount(root: HTMLElement): void {
         ? 'Paused'
         : `Ready · ${engineLabel}`;
     statusEl.textContent = engineStatus ?? stateLabel;
+    syncProgressBar(progressBar, pdf, currentWordIndex);
     syncFollowBtn();
   }
 
@@ -279,6 +284,7 @@ export function mount(root: HTMLElement): void {
         updateHighlightPositions(loaded.pages, loaded.words);
         setActiveHighlights(loaded.pages, 0, loaded.words);
         setError(null);
+        prewarmSpeech();
       }
     } catch (e) {
       if (ctrl.signal.aborted) return;
@@ -392,6 +398,12 @@ export function mount(root: HTMLElement): void {
     if (!followBtn.hidden) updateFollowArrow();
   }
 
+  function prewarmSpeech(): void {
+    if (session.getEngineId() === 'kokoro' && pdf && pdf.words.length > 0) {
+      void session.prewarmFrom(0).catch(() => {});
+    }
+  }
+
   function wirePdfFile(file: File): void {
     void file.arrayBuffer().then((ab) => {
       void applyBuffer({ buffer: ab.slice(0), fileName: file.name });
@@ -406,33 +418,65 @@ export function mount(root: HTMLElement): void {
 
   pickBtn.addEventListener('click', () => fileInput.click());
 
-  playBtn.addEventListener('click', () => {
+  function startPlayback(fromBeginning: boolean): void {
     if (!pdf || pdf.words.length === 0) return;
-    const fromStart = state === 'idle';
-    if (fromStart) autoScroll = true;
-    session.play(fromStart);
-    if (fromStart) {
+    if (fromBeginning) autoScroll = true;
+    session.play(fromBeginning);
+    if (fromBeginning) {
       setActiveHighlights(pdf.pages, 0, pdf.words);
     }
     state = 'playing';
     syncChrome();
-  });
+  }
 
-  pauseBtn.addEventListener('click', () => {
+  function pausePlayback(): void {
     session.pause();
     state = 'paused';
     syncChrome();
-  });
+  }
 
-  speedDownBtn.addEventListener('click', () => {
-    session.bumpRate(-RATE_STEP);
-    syncSpeed();
-  });
+  function togglePlayPause(): void {
+    if (!pdf || pdf.words.length === 0) return;
+    if (state === 'playing') pausePlayback();
+    else startPlayback(state === 'idle');
+  }
 
-  speedUpBtn.addEventListener('click', () => {
-    session.bumpRate(RATE_STEP);
+  playBtn.addEventListener('click', () => startPlayback(state === 'idle'));
+
+  pauseBtn.addEventListener('click', () => pausePlayback());
+
+  speedDownBtn.addEventListener('click', () => bumpSpeed(-RATE_STEP));
+
+  speedUpBtn.addEventListener('click', () => bumpSpeed(RATE_STEP));
+
+  function bumpSpeed(delta: number): void {
+    session.bumpRate(delta);
     syncSpeed();
-  });
+  }
+
+  function isTypingTarget(target: EventTarget | null): boolean {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  }
+
+  function onKeyDown(e: KeyboardEvent): void {
+    if (isTypingTarget(e.target)) return;
+    if (e.key === ' ' || e.code === 'Space') {
+      e.preventDefault();
+      togglePlayPause();
+    } else if (e.key === '-' || e.key === '_') {
+      e.preventDefault();
+      bumpSpeed(-RATE_STEP);
+    } else if (e.key === '+' || e.key === '=') {
+      e.preventDefault();
+      bumpSpeed(RATE_STEP);
+    }
+  }
+
+  window.addEventListener('keydown', onKeyDown);
 
   for (const btn of engineToggleEls) {
     btn.addEventListener('click', () => {
@@ -445,7 +489,7 @@ export function mount(root: HTMLElement): void {
       syncEngineToggle();
       syncChrome();
       // Kick off model warm-up so the first Play is responsive.
-      if (next === 'kokoro') void session.prepare().catch(() => {});
+      if (next === 'kokoro') prewarmSpeech();
       if (wasPlaying && pdf) setActiveHighlights(pdf.pages, 0, pdf.words);
     });
   }
