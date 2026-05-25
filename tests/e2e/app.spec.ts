@@ -79,7 +79,7 @@ test.describe('PDF read-aloud — initial UI', () => {
 
     await page.goto('/');
     await expect(page).toHaveTitle(/PDF read-aloud/i);
-    await expect(page.locator('.bottom-bar')).toBeVisible();
+    await expect(page.locator('.sidebar')).toBeVisible();
     await expect(page.locator('.drop-overlay')).toBeVisible();
     await expect(page.locator('.engine-toggle')).toBeVisible();
     await expect(page.locator('.voice-select')).toBeVisible();

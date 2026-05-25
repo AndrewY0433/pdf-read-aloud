@@ -236,6 +236,46 @@ describe('KokoroEngine playback control', () => {
     expect(generateMock).toHaveBeenCalledTimes(1);
   });
 
+  it('does not reuse a partial-chunk prewarm when playing from the chunk start', async () => {
+    const engine = new KokoroEngine(asPlaybackHooks(makeHooks()));
+    const { words, speakText } = makeWords(
+      'one two three four five six seven eight nine ten.',
+    );
+    engine.setContent(words, speakText);
+    await engine.prepare();
+    await engine.prewarmFrom(7);
+    expect(generateMock).toHaveBeenCalledTimes(1);
+    expect(generateMock).toHaveBeenLastCalledWith('eight nine ten.', expect.any(Object));
+    generateMock.mockClear();
+
+    engine.startAt(0);
+    await new Promise<void>((r) => setTimeout(r, 50));
+    expect(generateMock).toHaveBeenCalled();
+    expect(generateMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^one two/),
+      expect.any(Object),
+    );
+  });
+
+  it('drops prewarmed cache when playback rate changes while idle', async () => {
+    const engine = new KokoroEngine(asPlaybackHooks(makeHooks()));
+    const { words, speakText } = makeWords(
+      'one two three four five six seven eight nine ten.',
+    );
+    engine.setContent(words, speakText);
+    await engine.prewarmFrom(0);
+    expect(generateMock).toHaveBeenCalledTimes(1);
+    generateMock.mockClear();
+
+    engine.setRate(1.5);
+    engine.startAt(0);
+    await new Promise<void>((r) => setTimeout(r, 50));
+    expect(generateMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ speed: 1.5 }),
+    );
+  });
+
   it('setRate time-stretches the active clip instead of restarting the chunk', async () => {
     type FakeAudio = {
       playbackRate: number;
@@ -253,7 +293,7 @@ describe('KokoroEngine playback control', () => {
     const internal = engine as unknown as {
       audio: FakeAudio | null;
       currentChunkIdx: number;
-      chunkSynthesisRate: Map<number, number>;
+      cache: Map<number, { synthesisRate: number }>;
       rate: number;
     };
     const audio: FakeAudio = {
@@ -263,7 +303,9 @@ describe('KokoroEngine playback control', () => {
     };
     internal.audio = audio;
     internal.currentChunkIdx = 0;
-    internal.chunkSynthesisRate.set(0, 1);
+    internal.cache.set(0, {
+      synthesisRate: 1,
+    } as { synthesisRate: number });
     internal.rate = 1;
 
     engine.setRate(1.5);
@@ -314,6 +356,21 @@ describe('KokoroEngine error handling', () => {
     await new Promise<void>((r) => setTimeout(r, 30));
     expect(hooks.onStatus).toHaveBeenCalledWith(
       expect.stringMatching(/failed to load/i),
+    );
+    expect(hooks.onIdle).toHaveBeenCalled();
+  });
+
+  it('reports idle when chunk synthesis fails instead of hanging', async () => {
+    generateMock.mockRejectedValueOnce(new Error('synthesis boom'));
+    const hooks = makeHooks();
+    const engine = new KokoroEngine(asPlaybackHooks(hooks));
+    const { words, speakText } = makeWords('one two three four five six seven eight.');
+    engine.setContent(words, speakText);
+    await engine.prepare();
+    engine.startAt(0);
+    await new Promise<void>((r) => setTimeout(r, 120));
+    expect(hooks.onStatus).toHaveBeenCalledWith(
+      expect.stringMatching(/synthesis failed/i),
     );
     expect(hooks.onIdle).toHaveBeenCalled();
   });

@@ -23,7 +23,7 @@ export type AppContext = {
   dprRenderCtrl: AbortController | null;
   widthRenderTimer: ReturnType<typeof setTimeout> | null;
   dprRenderTimer: ReturnType<typeof setTimeout> | null;
-  lastInnerWidth: number;
+  lastViewerWidth: number;
   lastDpr: number;
 };
 
@@ -45,7 +45,7 @@ export function createAppContext(shell: AppShell, progressBar: ProgressBar): App
     dprRenderCtrl: null,
     widthRenderTimer: null,
     dprRenderTimer: null,
-    lastInnerWidth: window.innerWidth,
+    lastViewerWidth: shell.viewer.clientWidth,
     lastDpr: window.devicePixelRatio || 1,
   };
 }

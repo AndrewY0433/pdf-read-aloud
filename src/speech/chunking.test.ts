@@ -73,16 +73,16 @@ describe('buildChunks', () => {
     const chunks = buildChunks(words, speakText);
     for (const c of chunks) {
       const len = c.wordEnd - c.wordStart + 1;
-      expect(len).toBeLessThanOrEqual(48);
+      expect(len).toBeLessThanOrEqual(36);
     }
     expect(totalWords(chunks)).toBe(120);
   });
 
   it('breaks at a clause boundary (comma/semicolon/colon) once SOFT_WORDS is reached', () => {
     // Build a long stretch without sentence-ending punctuation but with one
-    // comma well past the soft threshold (22 words).
+    // comma well past the soft threshold (18 words).
     const tokens =
-      Array.from({ length: 26 }, (_, i) => `w${i}`).join(' ') +
+      Array.from({ length: 22 }, (_, i) => `w${i}`).join(' ') +
       ', and then ' +
       Array.from({ length: 10 }, (_, i) => `x${i}`).join(' ');
     const { words, speakText } = makeWords(tokens);

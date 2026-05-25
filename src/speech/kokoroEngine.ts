@@ -1,7 +1,12 @@
 import type { WordEntity } from '../types';
-import { charIndexToWordIndex } from '../pdf/textModel';
 import type { PlaybackEngine, PlaybackHooks } from './engine';
 import { buildChunks, findChunkForWord, type SpeechChunk } from './chunking';
+import {
+  buildWordTimeline,
+  rescaleTimeline,
+  wordIndexAtTime,
+  type WordTiming,
+} from './kokoroAlignment';
 import { float32ToWavBlob } from './wav';
 import {
   KOKORO_VOICES,
@@ -25,6 +30,16 @@ type ProgressEvent = {
   file?: string;
 };
 
+type CachedChunk = {
+  url: string;
+  voiceId: KokoroVoiceId;
+  synthesisRate: number;
+  synthDurationSec: number;
+  timeline: WordTiming[];
+  playbackWordStart: number;
+  playbackWordEnd: number;
+};
+
 export class KokoroEngine implements PlaybackEngine {
   readonly id = 'kokoro' as const;
 
@@ -45,12 +60,10 @@ export class KokoroEngine implements PlaybackEngine {
   private genGeneration = 0;
   private rate = 1;
   private voiceId: KokoroVoiceId;
-  /** Chunk index -> blob URL of synthesised audio, freed after playback. */
-  private cache = new Map<number, string>();
-  /** Kokoro voice id used when each cached chunk was synthesised. */
-  private chunkVoiceId = new Map<number, KokoroVoiceId>();
-  /** Kokoro `speed` used when each cached chunk was synthesised. */
-  private chunkSynthesisRate = new Map<number, number>();
+  /** Chunk index -> synthesised audio + weighted word timeline. */
+  private cache = new Map<number, CachedChunk>();
+  /** Chunks whose synthesis failed; prevents the consumer from waiting forever. */
+  private failedChunks = new Set<number>();
   private prewarmPromise: Promise<void> | null = null;
   /** Becomes true while playback loop is paused awaiting `resume()`. */
   private paused = false;
@@ -76,7 +89,7 @@ export class KokoroEngine implements PlaybackEngine {
     if (this.chunks.length === 0) return;
     const clamped = Math.max(0, Math.min(wordIndex, this.words.length - 1));
     const chunkIdx = findChunkForWord(this.chunks, clamped);
-    if (this.isChunkCachedForCurrentVoice(chunkIdx)) return;
+    if (this.isChunkUsable(chunkIdx, clamped)) return;
 
     if (this.prewarmPromise) {
       await this.prewarmPromise.catch(() => {});
@@ -106,10 +119,14 @@ export class KokoroEngine implements PlaybackEngine {
     // Mid-chunk: time-stretch the clip already playing (browser pitch correction),
     // drop any pre-rendered future chunks, and re-synthesise them at the new rate.
     if (this.audio && !this.paused && this.currentChunkIdx >= 0) {
-      const synRate = this.chunkSynthesisRate.get(this.currentChunkIdx) ?? rate;
+      const cached = this.cache.get(this.currentChunkIdx);
+      const synRate = cached?.synthesisRate ?? rate;
       applyTimeStretch(this.audio, rate / synRate);
       this.invalidateFutureChunks(this.currentChunkIdx + 1);
       this.scheduleGenerator(this.currentChunkIdx + 1);
+    } else if (this.cache.size > 0) {
+      // Prewarmed clips were synthesised at the old rate — drop them.
+      this.invalidateFutureChunks(0);
     }
   }
 
@@ -182,7 +199,8 @@ export class KokoroEngine implements PlaybackEngine {
       this.prewarmPromise = null;
     }
 
-    const preserveCache = reuseCachedChunk && this.isChunkCachedForCurrentVoice(startChunkIdx);
+    const preserveCache =
+      reuseCachedChunk && this.isChunkUsable(startChunkIdx, resumeWordIndex);
     this.abortPlayback(preserveCache ? startChunkIdx : undefined);
     const runId = this.runId;
 
@@ -217,7 +235,7 @@ export class KokoroEngine implements PlaybackEngine {
     fromWord: number,
     showStatus = false,
   ): Promise<void> {
-    if (this.isChunkCachedForCurrentVoice(chunkIdx)) return;
+    if (this.isChunkUsable(chunkIdx, fromWord)) return;
     const chunk = this.chunks[chunkIdx];
     if (!chunk) return;
 
@@ -235,17 +253,39 @@ export class KokoroEngine implements PlaybackEngine {
     const text =
       fromWord > chunk.wordStart ? this.textFromWord(fromWord, chunk) : chunk.text;
     const synthesisRate = this.rate;
+    const playbackWordStart = fromWord;
+    const playbackWordEnd = chunk.wordEnd;
+    const synthCharOffset = this.words[playbackWordStart]?.charStart ?? chunk.charStart;
     try {
       const result = await this.kokoro!.generate(text, {
         voice: this.voiceId,
         speed: synthesisRate,
       });
-      const blob = float32ToWavBlob(result.audio as Float32Array, result.sampling_rate);
-      this.cache.set(chunkIdx, URL.createObjectURL(blob));
-      this.chunkVoiceId.set(chunkIdx, this.voiceId);
-      this.chunkSynthesisRate.set(chunkIdx, synthesisRate);
+      const audio = result.audio as Float32Array;
+      const sampleRate = result.sampling_rate as number;
+      const synthDurationSec = audio.length / sampleRate;
+      const timeline = buildWordTimeline(
+        text,
+        synthDurationSec,
+        this.words,
+        playbackWordStart,
+        playbackWordEnd,
+        synthCharOffset,
+      );
+      const blob = float32ToWavBlob(audio, sampleRate);
+      this.cache.set(chunkIdx, {
+        url: URL.createObjectURL(blob),
+        voiceId: this.voiceId,
+        synthesisRate,
+        synthDurationSec,
+        timeline,
+        playbackWordStart,
+        playbackWordEnd,
+      });
+      this.failedChunks.delete(chunkIdx);
     } catch (e) {
       console.error(`Kokoro generation failed for chunk ${chunkIdx}`, e);
+      this.failedChunks.add(chunkIdx);
     } finally {
       if (showStatus) this.hooks.onStatus?.(null);
     }
@@ -283,11 +323,12 @@ export class KokoroEngine implements PlaybackEngine {
         await delay(40);
       }
       if (runId !== this.runId || genId !== this.genGeneration) return;
-      if (this.isChunkCachedForCurrentVoice(i)) continue;
 
       const chunk = this.chunks[i]!;
       const fromWord =
         resumeWordIndex !== undefined && i === startIdx ? resumeWordIndex : chunk.wordStart;
+      if (this.isChunkUsable(i, fromWord)) continue;
+
       await this.synthesizeChunk(i, fromWord);
       if (runId !== this.runId || genId !== this.genGeneration) return;
     }
@@ -297,25 +338,29 @@ export class KokoroEngine implements PlaybackEngine {
     for (let i = startIdx; i < this.chunks.length; i++) {
       if (runId !== this.runId) return;
 
-      while (!this.isChunkCachedForCurrentVoice(i) && runId === this.runId) {
+      const chunk = this.chunks[i]!;
+      const playbackWordStart = i === startIdx ? resumeWordIndex : chunk.wordStart;
+
+      while (!this.isChunkUsable(i, playbackWordStart) && runId === this.runId) {
+        if (this.failedChunks.has(i)) {
+          this.hooks.onStatus?.('Speech synthesis failed. Try again or switch engines.');
+          this.hooks.onIdle();
+          return;
+        }
         await delay(40);
       }
       if (runId !== this.runId) return;
 
-      const url = this.cache.get(i)!;
-      const chunk = this.chunks[i]!;
+      const cached = this.cache.get(i)!;
       this.currentChunkIdx = i;
-      const playbackWordStart = i === startIdx ? resumeWordIndex : chunk.wordStart;
       this.wordIndex = playbackWordStart;
       this.hooks.onWordIndex(playbackWordStart);
 
-      await this.playChunk(url, chunk, i, runId, playbackWordStart);
+      await this.playChunk(cached, chunk, runId, playbackWordStart);
       if (runId !== this.runId) return;
 
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(cached.url);
       this.cache.delete(i);
-      this.chunkVoiceId.delete(i);
-      this.chunkSynthesisRate.delete(i);
     }
 
     if (runId === this.runId) {
@@ -326,46 +371,74 @@ export class KokoroEngine implements PlaybackEngine {
   }
 
   private playChunk(
-    blobUrl: string,
+    cached: CachedChunk,
     chunk: SpeechChunk,
-    chunkIdx: number,
     runId: number,
     playbackWordStart = chunk.wordStart,
   ): Promise<void> {
     return new Promise<void>((resolve) => {
-      const audio = new Audio(blobUrl);
+      const audio = new Audio(cached.url);
       audio.preload = 'auto';
       this.audio = audio;
 
-      const synRate = this.chunkSynthesisRate.get(chunkIdx) ?? this.rate;
+      const synRate = cached.synthesisRate;
       applyTimeStretch(audio, this.rate / synRate);
 
-      const playbackCharStart =
-        this.words[playbackWordStart]?.charStart ?? chunk.charStart;
-      const playbackCharEnd = chunk.charEnd;
+      let timeline = cached.timeline;
+      const playbackWordEnd = Math.min(chunk.wordEnd, cached.playbackWordEnd);
+      let raf = 0;
 
-      const onTimeUpdate = (): void => {
-        if (runId !== this.runId || !audio.duration || !Number.isFinite(audio.duration)) return;
-        const ratio = Math.min(1, Math.max(0, audio.currentTime / audio.duration));
-        const span = Math.max(1, playbackCharEnd - playbackCharStart);
-        const targetChar = playbackCharStart + ratio * span;
-        const idx = charIndexToWordIndex(this.words, targetChar);
-        const clamped = Math.min(Math.max(idx, playbackWordStart), chunk.wordEnd);
-        if (clamped !== this.wordIndex) {
-          this.wordIndex = clamped;
-          this.hooks.onWordIndex(clamped);
+      const syncHighlight = (): void => {
+        if (runId !== this.runId) return;
+        const idx = wordIndexAtTime(
+          timeline,
+          audio.currentTime,
+          playbackWordStart,
+          playbackWordEnd,
+        );
+        if (idx !== this.wordIndex) {
+          this.wordIndex = idx;
+          this.hooks.onWordIndex(idx);
         }
       };
 
+      const tick = (): void => {
+        if (runId !== this.runId || audio.paused || audio.ended) return;
+        syncHighlight();
+        raf = requestAnimationFrame(tick);
+      };
+
       const finish = (): void => {
-        audio.removeEventListener('timeupdate', onTimeUpdate);
+        cancelAnimationFrame(raf);
+        audio.removeEventListener('loadedmetadata', onMetadata);
+        audio.removeEventListener('play', onPlay);
+        audio.removeEventListener('pause', onPause);
         audio.removeEventListener('ended', finish);
         audio.removeEventListener('error', finish);
         if (this.audio === audio) this.audio = null;
         resolve();
       };
 
-      audio.addEventListener('timeupdate', onTimeUpdate);
+      const onMetadata = (): void => {
+        if (!audio.duration || !Number.isFinite(audio.duration) || cached.synthDurationSec <= 0) {
+          return;
+        }
+        timeline = rescaleTimeline(timeline, audio.duration / cached.synthDurationSec);
+      };
+
+      const onPlay = (): void => {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(tick);
+      };
+
+      const onPause = (): void => {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      };
+
+      audio.addEventListener('loadedmetadata', onMetadata);
+      audio.addEventListener('play', onPlay);
+      audio.addEventListener('pause', onPause);
       audio.addEventListener('ended', finish);
       audio.addEventListener('error', finish);
 
@@ -373,17 +446,21 @@ export class KokoroEngine implements PlaybackEngine {
     });
   }
 
-  private isChunkCachedForCurrentVoice(chunkIdx: number): boolean {
-    return this.cache.has(chunkIdx) && this.chunkVoiceId.get(chunkIdx) === this.voiceId;
+  private isChunkUsable(chunkIdx: number, fromWord: number): boolean {
+    const cached = this.cache.get(chunkIdx);
+    if (!cached) return false;
+    if (cached.voiceId !== this.voiceId) return false;
+    if (cached.synthesisRate !== this.rate) return false;
+    if (cached.playbackWordStart !== fromWord) return false;
+    return true;
   }
 
   private invalidateFutureChunks(fromIdx: number): void {
     for (const idx of [...this.cache.keys()]) {
       if (idx < fromIdx) continue;
-      const url = this.cache.get(idx);
-      if (url) URL.revokeObjectURL(url);
+      const cached = this.cache.get(idx);
+      if (cached) URL.revokeObjectURL(cached.url);
       this.cache.delete(idx);
-      this.chunkSynthesisRate.delete(idx);
     }
   }
 
@@ -393,6 +470,7 @@ export class KokoroEngine implements PlaybackEngine {
     this.genGeneration++;
     this.prewarmPromise = null;
     this.paused = false;
+    this.failedChunks.clear();
     if (this.audio) {
       try {
         this.audio.pause();
@@ -407,20 +485,16 @@ export class KokoroEngine implements PlaybackEngine {
     this.playbackLoopActive = false;
 
     if (preserveChunkIdx === undefined) {
-      for (const url of this.cache.values()) URL.revokeObjectURL(url);
+      for (const cached of this.cache.values()) URL.revokeObjectURL(cached.url);
       this.cache.clear();
-      this.chunkVoiceId.clear();
-      this.chunkSynthesisRate.clear();
       return;
     }
 
     for (const idx of [...this.cache.keys()]) {
       if (idx === preserveChunkIdx) continue;
-      const url = this.cache.get(idx);
-      if (url) URL.revokeObjectURL(url);
+      const cached = this.cache.get(idx);
+      if (cached) URL.revokeObjectURL(cached.url);
       this.cache.delete(idx);
-      this.chunkVoiceId.delete(idx);
-      this.chunkSynthesisRate.delete(idx);
     }
   }
 

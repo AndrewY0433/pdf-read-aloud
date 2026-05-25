@@ -6,14 +6,14 @@ Small web app: upload a PDF, read it aloud in the browser, and highlight the cur
 
 ## Speech engines
 
-Two engines ship with the app, switchable from a toggle in the bottom bar:
+Two engines ship with the app, switchable from a toggle in the sidebar:
 
 - **Neural (Kokoro)** — _default._ Runs [Kokoro 82M](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX) (Apache‑2.0) 100% locally in the browser via Transformers.js + ONNX Runtime Web. WebGPU is used automatically when available (`fp32`); otherwise it falls back to multithreaded WASM (`q8`, ~85 MB one-time download, cached by the browser). Quality is far above any built-in voice; word highlighting is interpolated from the chunk's playback position.
 - **Browser** — uses the OS's `speechSynthesis` voices. Instant, no download, but lower quality and noticeably robotic.
 
 Your choice is remembered across page loads.
 
-## Limitations (MVP)
+## Limitations
 
 - **Upload only** — no opening PDFs from a URL.
 - **No OCR** — text must be selectable in the PDF. Image-only or scanned documents show a clear error.
@@ -66,7 +66,7 @@ Then open the URL shown in the terminal (paths are under `/pdf-read-aloud/`).
 - **Click any word** — restart playback from that word.
 - **Upload** — choose another PDF.
 - **Neural / Browser** — switch TTS engines on the fly.
-- **Voice** — dropdown in the bottom bar; choices depend on the active engine (Kokoro neural voices or your OS browser voices). Your pick is remembered per engine.
+- **Voice** — dropdown in the sidebar; choices depend on the active engine (Kokoro neural voices or your OS browser voices). Your pick is remembered per engine.
 - **Progress bar** — thin bar at the bottom of the viewer; hover to see which page you are on out of the total (e.g. “Page 12 of 240”).
 
 ## Stack

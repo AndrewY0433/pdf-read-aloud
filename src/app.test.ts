@@ -44,11 +44,11 @@ afterEach(() => {
 });
 
 describe('mount() — initial UI', () => {
-  it('renders the shell, bottom bar, drop overlay, and viewer', () => {
+  it('renders the shell, sidebar, drop overlay, and viewer', () => {
     const root = setup();
     expect(root.querySelector('.shell')).toBeTruthy();
     expect(root.querySelector('.viewer')).toBeTruthy();
-    expect(root.querySelector('.bottom-bar')).toBeTruthy();
+    expect(root.querySelector('.sidebar')).toBeTruthy();
     expect(root.querySelector('.drop-overlay')).toBeTruthy();
     expect(root.querySelector('input[type=file]')).toBeTruthy();
   });

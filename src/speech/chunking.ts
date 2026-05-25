@@ -9,8 +9,8 @@ export type SpeechChunk = {
 };
 
 const MIN_WORDS = 6;
-const SOFT_WORDS = 22;
-const HARD_WORDS = 48;
+const SOFT_WORDS = 18;
+const HARD_WORDS = 36;
 
 const SENTENCE_END_RE = /[.!?…][")'\]]?$/;
 const CLAUSE_END_RE = /[,;:][")'\]]?$/;

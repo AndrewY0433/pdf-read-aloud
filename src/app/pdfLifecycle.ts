@@ -153,11 +153,11 @@ export async function rerasterizeForDpr(ctx: AppContext): Promise<void> {
 
 export function onResize(ctx: AppContext): void {
   const newDpr = window.devicePixelRatio || 1;
-  const newWidth = window.innerWidth;
+  const newWidth = ctx.shell.viewer.clientWidth;
   const dprChanged = Math.abs(newDpr - ctx.lastDpr) > 0.005;
-  const widthChanged = newWidth !== ctx.lastInnerWidth;
+  const widthChanged = newWidth !== ctx.lastViewerWidth;
   ctx.lastDpr = newDpr;
-  ctx.lastInnerWidth = newWidth;
+  ctx.lastViewerWidth = newWidth;
   if (!ctx.pdf) return;
 
   if (dprChanged) {

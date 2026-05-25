@@ -1,16 +1,18 @@
 # PDF read-aloud — MVP plan
 
-This document defines scope, architecture, and acceptance criteria for the first shippable version of a web app that displays a PDF, reads it aloud, and highlights the current word (with subtle sentence context).
+> **Archived — no longer necessary.** This document is outdated and kept for historical reference only. The app has long since passed this MVP scope (neural TTS, sidebar controls, speed/voice picker, click-to-jump, and more). For current behavior, limitations, and setup, see [README.md](README.md).
+
+This document defines scope, architecture, and acceptance criteria for the first shippable version of a web app that displays a PDF, reads it aloud, and highlights the current word.
+
+> **Design note:** The original plan included a lighter tint on the current sentence alongside the active word. We dropped sentence highlighting — **current-word highlight only** — because it looked cleaner and less cluttered on real PDFs.
 
 ## Product goals (MVP)
 
 - User uploads a PDF (drag-and-drop or file picker).
 - The app renders the PDF in the browser with a **full-page** (or near full-page) viewer.
 - User presses **Play** to hear the text; **Pause** stops speech. No other transport controls in MVP.
-- While audio plays, the UI shows:
-  - a **clear highlight** on the **current word** (soft yellow),
-  - a **lighter tint** on the **current sentence** (or line span used as sentence proxy).
-- Layout: **PDF fills the view** with a **slim bottom bar** for play/pause (and minimal chrome such as filename if desired).
+- While audio plays, the UI shows a **clear highlight** on the **current word** only (soft yellow).
+- Layout: **PDF fills the main view** with a **left sidebar** for play/pause and controls; a **progress bar** stays pinned to the bottom of the viewer.
 - **Online-only** is acceptable for MVP (no requirement for offline PDF or TTS).
 - **Accessibility** (keyboard layers, screen reader polish) is **out of scope** for MVP unless trivially free.
 
@@ -51,7 +53,7 @@ This document defines scope, architecture, and acceptance criteria for the first
 
 - Precompute a list of entities, e.g. `{ pageIndex, wordIndex, sentenceId, bbox }` where `bbox` is in **viewport/text-layer coordinates** for overlay divs.
 - **Active word:** soft yellow background on the corresponding text-layer span or an absolutely positioned highlight `div`.
-- **Active sentence:** low-opacity background spanning the sentence’s word range (or a single rounded overlay behind the word row).
+- **No sentence tint** — we intentionally ship word-only highlighting (see design note above).
 - Recompute positions on **window resize** and **zoom** if zoom is exposed; MVP may ship **fixed 100% zoom** first to reduce scope.
 
 ### 4. Speech and synchronization
@@ -80,9 +82,9 @@ This document defines scope, architecture, and acceptance criteria for the first
 - [ ] User can upload a PDF and see pages rendered in the browser.
 - [ ] Extracted text matches what is visibly selectable on a **simple text PDF** test file.
 - [ ] Play starts speech from the beginning of extracted text; Pause stops it.
-- [ ] During playback, **one word** is highlighted in soft yellow and its **sentence** (or proxy span) has a lighter tint.
+- [ ] During playback, **one word** is highlighted in soft yellow (no sentence tint).
 - [ ] Highlight advances through the document in sync with speech **within reasonable tolerance** (manual test on Chrome + one other browser).
-- [ ] Bottom bar layout does not obscure critical PDF controls; Play/Pause is always reachable.
+- [ ] Sidebar layout does not obscure critical PDF content; Play/Pause is always reachable.
 - [ ] README or inline copy states limitations: no OCR, upload-only, Web Speech sync limitations.
 
 ## Milestones
@@ -100,6 +102,16 @@ This document defines scope, architecture, and acceptance criteria for the first
 - OCR for scans; URL open; offline/cache; Electron wrapper.
 - Multi-column reading order and structure-aware extraction.
 
+## TODO
+
+### Interactive progress bar
+
+Make the progress bar interactive so users can jump through the document:
+
+- **Click / drag to seek** — clicking or dragging on the bar jumps playback to the corresponding position (page or word).
+- **Hover preview** — while hovering, show a tooltip at the cursor (e.g. “Page 90 of 180”) based on hover position, not just the current reading position.
+- **Current-position marker** — a visible dot on the bar for where playback currently is; the hover tooltip should **snap / lock to the dot** when the cursor is near it so the current position stays easy to read even while exploring other spots on the bar.
+
 ## Open decisions (resolve when scaffolding the repo)
 
 - **Exact default:** start speech from page 1 vs first visible page.
@@ -108,4 +120,4 @@ This document defines scope, architecture, and acceptance criteria for the first
 
 ---
 
-*Derived from discovery: upload-only PDF, overlay + bottom bar, play/pause only, word + sentence highlight (yellow + tint), precise sync as practical with Web Speech, online-only, no MVP accessibility mandate.*
+*Derived from discovery: upload-only PDF, overlay + sidebar + bottom progress bar, play/pause only, current-word highlight (yellow), precise sync as practical with Web Speech, online-only, no MVP accessibility mandate.*
