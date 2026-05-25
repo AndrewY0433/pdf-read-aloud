@@ -47,15 +47,7 @@ Every push and pull request runs [GitHub Actions](.github/workflows/ci.yml): Typ
 
 Pushes to `master` that pass CI are deployed automatically via [deploy-pages.yml](.github/workflows/deploy-pages.yml).
 
-### One-time setup (required before the first deploy)
-
-If deploy fails with `Failed to create deployment (status: 404)`, Pages is not turned on yet. Do this once:
-
-1. Open **[Settings → Pages](https://github.com/AndrewY0433/pdf-read-aloud/settings/pages)** for this repo.
-2. Under **Build and deployment → Source**, choose **GitHub Actions** (not “Deploy from a branch”).
-3. Re-run the failed deploy: **Actions → Deploy to GitHub Pages → Run workflow**, or push another commit to `master`.
-
-After the first successful deploy, the site URL above should load within a minute or two.
+**One-time setup** (if Pages is not enabled yet): in the repo on GitHub go to **Settings → Pages → Build and deployment** and set **Source** to **GitHub Actions**.
 
 To preview the Pages build locally:
 
@@ -76,9 +68,6 @@ Then open the URL shown in the terminal (paths are under `/pdf-read-aloud/`).
 - **Neural / Browser** — switch TTS engines on the fly.
 - **Voice** — dropdown in the bottom bar; choices depend on the active engine (Kokoro neural voices or your OS browser voices). Your pick is remembered per engine.
 - **Progress bar** — thin bar at the bottom of the viewer; hover to see which page you are on out of the total (e.g. “Page 12 of 240”).
-
-## Todo
-- [ ] **Reformat `app.ts`** — split the monolithic `mount()` into smaller modules (chrome, resize handlers, playback wiring).
 
 ## Stack
 

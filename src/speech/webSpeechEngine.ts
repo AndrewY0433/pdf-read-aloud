@@ -79,7 +79,7 @@ export class WebSpeechEngine implements PlaybackEngine {
     if (!voiceId || voiceId === this.voiceId) return;
     this.voiceId = voiceId;
     savePreferredVoice('web-speech', voiceId);
-    if (speechSynthesis.speaking && !speechSynthesis.paused) {
+    if (speechSynthesis.speaking || speechSynthesis.paused) {
       this.startUtterance(this.wordIndex);
     }
   }

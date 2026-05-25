@@ -149,17 +149,26 @@ describe('KokoroEngine.setContent', () => {
       });
     });
   });
-  it('setVoiceId passes the voice to Kokoro generate', async () => {
+  it('setVoiceId during playback re-synthesises with the new voice instead of reusing cache', async () => {
+    generateMock.mockResolvedValue({
+      audio: new Float32Array(24_000),
+      sampling_rate: 24_000,
+    });
     const hooks = makeHooks();
     const engine = new KokoroEngine(asPlaybackHooks(hooks), 'af_bella');
     const { words, speakText } = makeWords('Hello world today here now.');
     engine.setContent(words, speakText);
     await engine.prepare();
     engine.startAt(0);
-    await new Promise<void>((r) => setTimeout(r, 30));
+    await new Promise<void>((r) => setTimeout(r, 10));
+    generateMock.mockClear();
+
+    engine.setVoiceId('af_sarah');
+    await new Promise<void>((r) => setTimeout(r, 50));
+
     expect(generateMock).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ voice: 'af_bella' }),
+      expect.objectContaining({ voice: 'af_sarah' }),
     );
   });
 });

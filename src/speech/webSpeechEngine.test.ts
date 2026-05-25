@@ -133,6 +133,36 @@ describe('WebSpeechEngine', () => {
     expect(utt.voice?.voiceURI).toBe('fake://en-US');
   });
 
+  it('setVoiceId while paused restarts with the new voice', () => {
+    const speech = fakeSpeech();
+    speech.getVoices = vi.fn((): SpeechSynthesisVoice[] => [
+      {
+        default: true,
+        lang: 'en-US',
+        localService: true,
+        name: 'Fake English',
+        voiceURI: 'fake://en-US',
+      } as SpeechSynthesisVoice,
+      {
+        default: false,
+        lang: 'en-GB',
+        localService: true,
+        name: 'Fake British',
+        voiceURI: 'fake://en-GB',
+      } as SpeechSynthesisVoice,
+    ]);
+    engine = new WebSpeechEngine(asPlaybackHooks(hooks), 'fake://en-GB');
+    engine.setContent(words, speakText);
+    engine.startAt(0);
+    speech.speaking = true;
+    engine.pause();
+    speech.paused = true;
+    engine.setVoiceId('fake://en-US');
+    expect(speech.speak).toHaveBeenCalledTimes(2);
+    const restart = speech.speak.mock.calls[1]![0] as SpeechSynthesisUtterance;
+    expect(restart.voice?.voiceURI).toBe('fake://en-US');
+  });
+
   it('setVoiceId while speaking restarts at the current word', () => {
     const speech = fakeSpeech();
     speech.getVoices = vi.fn((): SpeechSynthesisVoice[] => [
