@@ -35,6 +35,10 @@ npm run build
 npm run preview
 ```
 
+## CI
+
+Every push and pull request runs [GitHub Actions](.github/workflows/ci.yml): TypeScript typecheck, Vitest unit tests, production build, and Playwright e2e tests (Chromium).
+
 ## Controls
 
 - **Play** — starts from the beginning when idle; **Pause** pauses speech (resume with Play).
@@ -47,7 +51,6 @@ npm run preview
 
 ## Todo
 - [ ] **Voice selection** — pick a voice per engine (Kokoro voices and browser `speechSynthesis` voices).
-- [ ] **CI** — GitHub Actions workflow running typecheck, unit tests, and e2e on every push.
 - [ ] **Reformat `app.ts`** — split the monolithic `mount()` into smaller modules (chrome, resize handlers, playback wiring).
 
 ## Stack

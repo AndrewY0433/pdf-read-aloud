@@ -169,7 +169,7 @@ describe('mount() — play / pause', () => {
         destroy: vi.fn(),
         ensurePageRendered: vi.fn().mockResolvedValue(undefined),
       },
-    } as Awaited<ReturnType<typeof loadAndRenderPdf>>);
+    } as unknown as Awaited<ReturnType<typeof loadAndRenderPdf>>);
 
     const root = setup();
     const fileInput = root.querySelector<HTMLInputElement>('input[type=file]')!;
