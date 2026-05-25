@@ -41,6 +41,23 @@ npm run preview
 
 Every push and pull request runs [GitHub Actions](.github/workflows/ci.yml): TypeScript typecheck, Vitest unit tests, production build, and Playwright e2e tests (Chromium).
 
+## Live demo (GitHub Pages)
+
+**https://andrewy0433.github.io/pdf-read-aloud/**
+
+Pushes to `master` that pass CI are deployed automatically via [deploy-pages.yml](.github/workflows/deploy-pages.yml).
+
+**One-time setup** (if Pages is not enabled yet): in the repo on GitHub go to **Settings → Pages → Build and deployment** and set **Source** to **GitHub Actions**.
+
+To preview the Pages build locally:
+
+```bash
+BASE_PATH=/pdf-read-aloud/ npm run build
+npm run preview
+```
+
+Then open the URL shown in the terminal (paths are under `/pdf-read-aloud/`).
+
 ## Controls
 
 - **Play** — starts from the beginning when idle; **Pause** pauses speech (resume with Play).

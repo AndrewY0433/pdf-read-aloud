@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  // GitHub Pages serves project sites from /repo-name/; local dev uses /.
+  base: process.env.BASE_PATH ?? '/',
   server: {
     port: 5173,
   },
