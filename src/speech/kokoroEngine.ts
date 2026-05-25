@@ -3,9 +3,15 @@ import { charIndexToWordIndex } from '../pdf/textModel';
 import type { PlaybackEngine, PlaybackHooks } from './engine';
 import { buildChunks, findChunkForWord, type SpeechChunk } from './chunking';
 import { float32ToWavBlob } from './wav';
+import {
+  KOKORO_VOICES,
+  isKokoroVoice,
+  loadPreferredKokoroVoice,
+  savePreferredVoice,
+  type KokoroVoiceId,
+} from './voices';
 
 const MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX';
-const DEFAULT_VOICE = 'af_heart';
 // How many chunks ahead of the consumer we'll allow the generator to pre-synthesise.
 // Higher = smoother audio handoffs, lower = less wasted work if user navigates.
 const LOOKAHEAD = 2;
@@ -38,6 +44,7 @@ export class KokoroEngine implements PlaybackEngine {
   private runId = 0;
   private genGeneration = 0;
   private rate = 1;
+  private voiceId: KokoroVoiceId;
   /** Chunk index -> blob URL of synthesised audio, freed after playback. */
   private cache = new Map<number, string>();
   /** Kokoro `speed` used when each cached chunk was synthesised. */
@@ -46,8 +53,9 @@ export class KokoroEngine implements PlaybackEngine {
   /** Becomes true while playback loop is paused awaiting `resume()`. */
   private paused = false;
 
-  constructor(hooks: PlaybackHooks) {
+  constructor(hooks: PlaybackHooks, voiceId?: KokoroVoiceId) {
     this.hooks = hooks;
+    this.voiceId = voiceId ?? loadPreferredKokoroVoice();
   }
 
   async prepare(): Promise<void> {
@@ -99,6 +107,28 @@ export class KokoroEngine implements PlaybackEngine {
       this.invalidateFutureChunks(this.currentChunkIdx + 1);
       this.scheduleGenerator(this.currentChunkIdx + 1);
     }
+  }
+
+  listVoices() {
+    return [...KOKORO_VOICES];
+  }
+
+  getVoiceId(): string {
+    return this.voiceId;
+  }
+
+  setVoiceId(voiceId: string): void {
+    if (!isKokoroVoice(voiceId) || voiceId === this.voiceId) return;
+    this.voiceId = voiceId;
+    savePreferredVoice('kokoro', voiceId);
+
+    const active = this.audio !== null || this.currentChunkIdx >= 0;
+    if (active) {
+      const resumeAt = this.wordIndex;
+      void this.runPlayback(findChunkForWord(this.chunks, resumeAt), resumeAt);
+      return;
+    }
+    this.invalidateFutureChunks(0);
   }
 
   startAt(wordIndex: number): void {
@@ -196,7 +226,7 @@ export class KokoroEngine implements PlaybackEngine {
     const synthesisRate = this.rate;
     try {
       const result = await this.kokoro!.generate(text, {
-        voice: DEFAULT_VOICE,
+        voice: this.voiceId,
         speed: synthesisRate,
       });
       const blob = float32ToWavBlob(result.audio as Float32Array, result.sampling_rate);

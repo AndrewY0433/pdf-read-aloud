@@ -16,6 +16,7 @@ import {
   type EngineId,
 } from './speech/playback';
 import { createProgressBar, syncProgressBar } from './progressBar';
+import { populateVoiceSelect } from './speech/voices';
 import type { AppState } from './types';
 
 type LoadedBuffer = { buffer: ArrayBuffer; fileName: string };
@@ -97,6 +98,10 @@ export function mount(root: HTMLElement): void {
       <button type="button" class="toggle-btn" data-engine="kokoro" title="High-quality neural voice. ~85 MB model, cached locally.">Neural</button>
       <button type="button" class="toggle-btn" data-engine="web-speech" title="Built-in browser voices. Instant, lower quality.">Browser</button>
     </div>
+    <label class="voice-control">
+      <span class="voice-label">Voice</span>
+      <select class="voice-select" aria-label="Voice"></select>
+    </label>
     <button type="button" class="btn secondary" data-act="pick" title="Open another PDF">Upload</button>
     <button type="button" class="btn" data-act="play" title="Play (Space)" disabled>Play</button>
     <button type="button" class="btn secondary" data-act="pause" title="Pause (Space)" disabled>Pause</button>
@@ -115,6 +120,7 @@ export function mount(root: HTMLElement): void {
   const speedDownBtn = bar.querySelector<HTMLButtonElement>('[data-act=speed-down]')!;
   const speedUpBtn = bar.querySelector<HTMLButtonElement>('[data-act=speed-up]')!;
   const speedValueEl = bar.querySelector<HTMLSpanElement>('.speed-value')!;
+  const voiceSelect = bar.querySelector<HTMLSelectElement>('.voice-select')!;
 
   const session = new ReadAloudSession([], '', {
     onWordIndex: (i) => {
@@ -138,10 +144,21 @@ export function mount(root: HTMLElement): void {
       engineStatus = msg;
       syncChrome();
     },
+    onVoicesChanged: () => {
+      syncVoiceSelect();
+    },
+    onEngineReady: () => {
+      syncVoiceSelect();
+    },
   });
 
   syncEngineToggle();
   syncSpeed();
+  syncVoiceSelect();
+
+  function syncVoiceSelect(): void {
+    populateVoiceSelect(voiceSelect, session.listVoices(), session.getVoiceId());
+  }
 
   function setError(msg: string | null): void {
     if (!msg) {
@@ -478,6 +495,10 @@ export function mount(root: HTMLElement): void {
 
   window.addEventListener('keydown', onKeyDown);
 
+  voiceSelect.addEventListener('change', () => {
+    session.setVoiceId(voiceSelect.value);
+  });
+
   for (const btn of engineToggleEls) {
     btn.addEventListener('click', () => {
       const next = btn.dataset.engine as EngineId | undefined;
@@ -487,6 +508,7 @@ export function mount(root: HTMLElement): void {
       state = 'idle';
       engineStatus = null;
       syncEngineToggle();
+      syncVoiceSelect();
       syncChrome();
       // Kick off model warm-up so the first Play is responsive.
       if (next === 'kokoro') prewarmSpeech();

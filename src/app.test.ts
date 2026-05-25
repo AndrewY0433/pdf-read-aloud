@@ -71,6 +71,13 @@ describe('mount() — initial UI', () => {
     expect(active?.dataset.engine).toBe('web-speech');
   });
 
+  it('exposes a voice selector populated for the active engine', () => {
+    const root = setup();
+    const voiceSelect = root.querySelector<HTMLSelectElement>('.voice-select');
+    expect(voiceSelect).toBeTruthy();
+    expect(voiceSelect!.options.length).toBeGreaterThan(0);
+  });
+
   it('exposes the speed control and starts at 1.0x', () => {
     const root = setup();
     const value = root.querySelector('.speed-value')?.textContent;

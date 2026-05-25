@@ -82,6 +82,7 @@ test.describe('PDF read-aloud — initial UI', () => {
     await expect(page.locator('.bottom-bar')).toBeVisible();
     await expect(page.locator('.drop-overlay')).toBeVisible();
     await expect(page.locator('.engine-toggle')).toBeVisible();
+    await expect(page.locator('.voice-select')).toBeVisible();
     await expect(page.locator('.speed-control')).toBeVisible();
     await expect(page.locator('.speed-value')).toHaveText('1.0x');
     expect(errors).toEqual([]);

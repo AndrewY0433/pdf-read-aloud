@@ -126,6 +126,45 @@ describe('WebSpeechEngine', () => {
     expect(utt.rate).toBeCloseTo(1.5);
   });
 
+  it('setVoiceId applies the chosen browser voice', () => {
+    engine.setVoiceId('fake://en-US');
+    engine.startAt(0);
+    const utt = fakeSpeech().speak.mock.calls[0]![0] as SpeechSynthesisUtterance;
+    expect(utt.voice?.voiceURI).toBe('fake://en-US');
+  });
+
+  it('setVoiceId while speaking restarts at the current word', () => {
+    const speech = fakeSpeech();
+    speech.getVoices = vi.fn((): SpeechSynthesisVoice[] => [
+      {
+        default: true,
+        lang: 'en-US',
+        localService: true,
+        name: 'Fake English',
+        voiceURI: 'fake://en-US',
+      } as SpeechSynthesisVoice,
+      {
+        default: false,
+        lang: 'en-GB',
+        localService: true,
+        name: 'Fake British',
+        voiceURI: 'fake://en-GB',
+      } as SpeechSynthesisVoice,
+    ]);
+    engine = new WebSpeechEngine(asPlaybackHooks(hooks), 'fake://en-GB');
+    engine.setContent(words, speakText);
+    engine.startAt(0);
+    const first = speech.speak.mock.calls[0]![0] as SpeechSynthesisUtterance;
+    first.onboundary?.({ charIndex: 16 } as SpeechSynthesisEvent);
+    speech.speaking = true;
+    speech.paused = false;
+    engine.setVoiceId('fake://en-US');
+    expect(speech.speak).toHaveBeenCalledTimes(2);
+    const restart = speech.speak.mock.calls[1]![0] as SpeechSynthesisUtterance;
+    expect(restart.voice?.voiceURI).toBe('fake://en-US');
+    expect(restart.text.startsWith('fox')).toBe(true);
+  });
+
   it('setRate while speaking cancels and restarts the utterance at the same word', () => {
     engine.startAt(0);
     const speech = fakeSpeech();

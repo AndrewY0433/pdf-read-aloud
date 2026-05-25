@@ -9,6 +9,13 @@ export type PlaybackHooks = {
   onStatus?: (msg: string | null) => void;
   /** Fires when the engine becomes ready (model loaded). */
   onEngineReady?: (id: EngineId) => void;
+  /** Browser voices finished loading or changed (web-speech only). */
+  onVoicesChanged?: () => void;
+};
+
+export type VoiceOption = {
+  id: string;
+  label: string;
 };
 
 export interface PlaybackEngine {
@@ -32,6 +39,9 @@ export interface PlaybackEngine {
    * the current utterance); when idle/paused it is just stored.
    */
   setRate(rate: number): void;
+  listVoices(): VoiceOption[];
+  getVoiceId(): string;
+  setVoiceId(voiceId: string): void;
   /** Cold start at the given word index. Always restarts from scratch. */
   startAt(wordIndex: number): void;
   /** Resume after a previous pause(). No state reset. */

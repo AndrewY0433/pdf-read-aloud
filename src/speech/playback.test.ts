@@ -105,6 +105,28 @@ describe('ReadAloudSession orchestration', () => {
     expect(localStorage.getItem('pdf-read-aloud.engine')).toBe('web-speech');
   });
 
+  it('persists and restores voice preferences per engine', () => {
+    localStorage.setItem('pdf-read-aloud.voice.kokoro', 'af_bella');
+    localStorage.setItem('pdf-read-aloud.voice.web-speech', 'fake://en-US');
+    localStorage.setItem('pdf-read-aloud.engine', 'web-speech');
+
+    const session = new ReadAloudSession([], '', blankHooks());
+    expect(session.getVoiceId()).toBe('fake://en-US');
+
+    session.setEngine('kokoro');
+    expect(session.getVoiceId()).toBe('af_bella');
+
+    session.setVoiceId('af_sarah');
+    expect(localStorage.getItem('pdf-read-aloud.voice.kokoro')).toBe('af_sarah');
+    expect(session.getVoiceId()).toBe('af_sarah');
+  });
+
+  it('lists Kokoro voices from the neural engine', () => {
+    const session = new ReadAloudSession([], '', blankHooks());
+    expect(session.listVoices().length).toBeGreaterThan(10);
+    expect(session.listVoices().some((v) => v.id === 'af_heart')).toBe(true);
+  });
+
   it('setEngine is a noop when already active', () => {
     const session = new ReadAloudSession([], '', blankHooks());
     session.setEngine('kokoro');

@@ -1,14 +1,15 @@
 import type { WordEntity } from '../types';
 import { charIndexToWordIndex } from '../pdf/textModel';
 import type { PlaybackEngine, PlaybackHooks } from './engine';
+import {
+  defaultVoiceForEngine,
+  listBrowserVoices,
+  loadPreferredVoice,
+  resolveBrowserVoice,
+  savePreferredVoice,
+} from './voices';
 
 const FALLBACK_CPS = 13;
-
-function pickVoice(): SpeechSynthesisVoice | null {
-  const voices = speechSynthesis.getVoices();
-  const en = voices.find((v) => v.lang?.toLowerCase().startsWith('en-us'));
-  return en ?? voices.find((v) => v.lang?.toLowerCase().startsWith('en')) ?? voices[0] ?? null;
-}
 
 export class WebSpeechEngine implements PlaybackEngine {
   readonly id = 'web-speech' as const;
@@ -24,22 +25,29 @@ export class WebSpeechEngine implements PlaybackEngine {
   private lastBoundaryChar = 0;
   private lastBoundaryAt = 0;
   private rate = 1;
+  private voiceId: string;
   private currentUtterance: SpeechSynthesisUtterance | null = null;
 
-  constructor(hooks: PlaybackHooks) {
+  constructor(hooks: PlaybackHooks, voiceId?: string) {
     this.hooks = hooks;
+    this.voiceId = voiceId ?? loadPreferredVoice('web-speech');
     speechSynthesis.onvoiceschanged = () => {
       speechSynthesis.getVoices();
+      this.ensureVoiceId();
+      this.hooks.onVoicesChanged?.();
     };
     speechSynthesis.getVoices();
+    this.ensureVoiceId();
   }
 
   async prepare(): Promise<void> {
     speechSynthesis.getVoices();
+    this.ensureVoiceId();
   }
 
   async prewarmFrom(_wordIndex: number): Promise<void> {
     speechSynthesis.getVoices();
+    this.ensureVoiceId();
   }
 
   setContent(words: WordEntity[], speakText: string): void {
@@ -54,6 +62,23 @@ export class WebSpeechEngine implements PlaybackEngine {
     // SpeechSynthesisUtterance.rate is locked once `speak()` is called, so
     // we have to throw away the current utterance and restart at the same
     // word to actually hear the new speed.
+    if (speechSynthesis.speaking && !speechSynthesis.paused) {
+      this.startUtterance(this.wordIndex);
+    }
+  }
+
+  listVoices() {
+    return listBrowserVoices();
+  }
+
+  getVoiceId(): string {
+    return this.voiceId;
+  }
+
+  setVoiceId(voiceId: string): void {
+    if (!voiceId || voiceId === this.voiceId) return;
+    this.voiceId = voiceId;
+    savePreferredVoice('web-speech', voiceId);
     if (speechSynthesis.speaking && !speechSynthesis.paused) {
       this.startUtterance(this.wordIndex);
     }
@@ -98,6 +123,13 @@ export class WebSpeechEngine implements PlaybackEngine {
     this.cancelSpeech();
   }
 
+  private ensureVoiceId(): void {
+    const options = listBrowserVoices();
+    if (options.length === 0) return;
+    if (options.some((v) => v.id === this.voiceId)) return;
+    this.voiceId = defaultVoiceForEngine('web-speech');
+  }
+
   private cancelSpeech(): void {
     cancelAnimationFrame(this.raf);
     this.raf = 0;
@@ -131,8 +163,8 @@ export class WebSpeechEngine implements PlaybackEngine {
     this.hooks.onWordIndex(this.wordIndex);
 
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'en-US';
-    const voice = pickVoice();
+    const voice = resolveBrowserVoice(this.voiceId);
+    u.lang = voice?.lang ?? 'en-US';
     if (voice) u.voice = voice;
     u.rate = this.rate;
 

@@ -2,6 +2,7 @@ import type { WordEntity } from '../types';
 import type { EngineId, PlaybackEngine, PlaybackHooks } from './engine';
 import { WebSpeechEngine } from './webSpeechEngine';
 import { KokoroEngine } from './kokoroEngine';
+import { loadPreferredVoice, loadPreferredKokoroVoice } from './voices';
 
 const ENGINE_PREF_KEY = 'pdf-read-aloud.engine';
 const RATE_PREF_KEY = 'pdf-read-aloud.rate';
@@ -155,6 +156,18 @@ export class ReadAloudSession {
     savePreferredEngine(id);
   }
 
+  listVoices() {
+    return this.engine.listVoices();
+  }
+
+  getVoiceId(): string {
+    return this.engine.getVoiceId();
+  }
+
+  setVoiceId(voiceId: string): void {
+    this.engine.setVoiceId(voiceId);
+  }
+
   /** Best-effort warm-up; safe to call before the user hits Play. */
   prepare(): Promise<void> {
     return this.engine.prepare();
@@ -166,7 +179,7 @@ export class ReadAloudSession {
   }
 
   private createEngine(id: EngineId): PlaybackEngine {
-    if (id === 'kokoro') return new KokoroEngine(this.hooks);
-    return new WebSpeechEngine(this.hooks);
+    if (id === 'kokoro') return new KokoroEngine(this.hooks, loadPreferredKokoroVoice());
+    return new WebSpeechEngine(this.hooks, loadPreferredVoice('web-speech'));
   }
 }

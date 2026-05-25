@@ -149,6 +149,19 @@ describe('KokoroEngine.setContent', () => {
       });
     });
   });
+  it('setVoiceId passes the voice to Kokoro generate', async () => {
+    const hooks = makeHooks();
+    const engine = new KokoroEngine(asPlaybackHooks(hooks), 'af_bella');
+    const { words, speakText } = makeWords('Hello world today here now.');
+    engine.setContent(words, speakText);
+    await engine.prepare();
+    engine.startAt(0);
+    await new Promise<void>((r) => setTimeout(r, 30));
+    expect(generateMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ voice: 'af_bella' }),
+    );
+  });
 });
 
 describe('KokoroEngine playback control', () => {
